@@ -49,6 +49,9 @@ function App() {
                   <Link className="nav-link" to="/create-certificates">Create Certificate</Link>
                 </li>
               )}
+              {userRole === "ADMIN" && (<Link className="nav-link" to="/register-ca-user">
+                Add CA User
+              </Link>)}
             </ul>
             <div className="d-flex">
               {!isLoggedIn ? (
@@ -82,6 +85,7 @@ function App() {
           />
           <Route path="/register" element={<Register />} />
           <Route path='/create-certificates' element={<CertificateForm role={userRole}/>} />
+          <Route path="/register-ca-user" element={<Register adminMode={true}/>} />
         </Routes>
       </div>
     </Router>
