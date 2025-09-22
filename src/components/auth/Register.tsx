@@ -2,44 +2,59 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import AuthService, { type RegisterData } from "../../services/AuthService";
 
-export default function Register() {
-  const [form, setForm] = useState<
-    RegisterData
-  >({
+interface RegisterProps {
+  adminMode?: boolean; // if true, admin registering CA user
+}
+
+export default function Register({ adminMode = false }: RegisterProps) {
+  const [form, setForm] = useState<RegisterData>({
     email: "",
     password: "",
     confirmPassword: "",
     firstName: "",
     lastName: "",
     organization: "",
-    userRole: "USER", // default
+    userRole: adminMode ? "CA_USER" : "USER", // default based on mode
   });
 
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const handleChange = (
-    e: ChangeEvent<HTMLInputElement | HTMLSelectElement>
-  ) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
 
     if (form.password !== form.confirmPassword) {
       setError("Passwords do not match!");
       return;
     }
 
-    const { ...registerData } = form;
-
     try {
-      await AuthService.register(registerData);
-      navigate("/login");
+      await AuthService.register(form);
+      setSuccess(`User ${form.email} registered successfully.`);
+      console.log("AD")
+      console.log(adminMode)
+      setForm({
+        email: "",
+        password: "",
+        confirmPassword: "",
+        firstName: "",
+        lastName: "",
+        organization: "",
+        userRole: adminMode ? "CA_USER" : "USER",
+      });
+
+      if (!adminMode) {
+        navigate("/login"); // for public registration, go to login
+      }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || "Registration failed.");
     }
   };
 
@@ -48,8 +63,13 @@ export default function Register() {
       <div className="row justify-content-center">
         <div className="col-md-6">
           <div className="card shadow-lg p-4">
-            <h2 className="text-center mb-4">Register</h2>
+            <h2 className="text-center mb-4">
+              {adminMode ? "Register CA User" : "Register"}
+            </h2>
+
             {error && <div className="alert alert-danger">{error}</div>}
+            {success && <div className="alert alert-success">{success}</div>}
+
             <form onSubmit={handleSubmit}>
               <div className="mb-3">
                 <label className="form-label">Email</label>
@@ -108,9 +128,15 @@ export default function Register() {
                   value={form.userRole}
                   onChange={handleChange}
                   required
+                  disabled={adminMode} // disable if admin creating CA user
                 >
-                  <option value="USER">User</option>
-                  <option value="ADMIN">Admin</option>
+                  {adminMode ? (
+                    <option value="CA_USER">CA User</option>
+                  ) : (
+                    <>
+                      <option value="USER">User</option>
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -141,7 +167,7 @@ export default function Register() {
               </div>
 
               <button type="submit" className="btn btn-primary w-100">
-                Register
+                {adminMode ? "Register CA User" : "Register"}
               </button>
             </form>
           </div>

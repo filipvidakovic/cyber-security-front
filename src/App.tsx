@@ -6,15 +6,21 @@ import AuthService from './services/AuthService';
 import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
 import HomePage from "./pages/HomePage";
+import CertificateForm from './components/certificate/CertificateForm';
 
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(
     AuthService.isAuthenticated()
   );
+  const [userRole, setUserRole] = useState<"USER" | "ADMIN" | "CA_USER" | null>(
+    AuthService.getUserRole()
+  );
+
 
   const handleLogout = () => {
     AuthService.logout();
     setIsLoggedIn(false);
+    setUserRole(null);
   };
   return (
     <Router>
@@ -38,6 +44,14 @@ function App() {
                   Home
                 </Link>
               </li>
+              {(userRole === "ADMIN" || userRole === "CA_USER" || userRole === "USER") && (
+                <li className="nav-item">
+                  <Link className="nav-link" to="/create-certificates">Create Certificate</Link>
+                </li>
+              )}
+              {userRole === "ADMIN" && (<Link className="nav-link" to="/register-ca-user">
+                Add CA User
+              </Link>)}
             </ul>
             <div className="d-flex">
               {!isLoggedIn ? (
@@ -62,8 +76,16 @@ function App() {
       <div className="container">
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<Login />} />
+         <Route
+            path="/login"
+            element={<Login onLogin={(role) => {
+              setIsLoggedIn(true);
+              setUserRole(role);
+            }} />}
+          />
           <Route path="/register" element={<Register />} />
+          <Route path='/create-certificates' element={<CertificateForm role={userRole}/>} />
+          <Route path="/register-ca-user" element={<Register adminMode={true}/>} />
         </Routes>
       </div>
     </Router>

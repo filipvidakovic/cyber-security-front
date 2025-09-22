@@ -2,8 +2,12 @@ import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import AuthService, { type LoginData } from "../../services/AuthService";
 
-export default function Login() {
-  const [form, setForm] = useState<LoginData>({ username: "", password: "" });
+interface LoginProps {
+  onLogin?: (role: "USER" | "ADMIN" | "CA_USER") => void;
+}
+
+export default function Login({ onLogin }: LoginProps) {
+  const [form, setForm] = useState<LoginData>({ email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -15,7 +19,8 @@ export default function Login() {
     e.preventDefault();
     setError(null);
     try {
-      await AuthService.login(form);
+      const data = await AuthService.login(form);
+      if (onLogin && data.role) onLogin(data.role);
       navigate("/"); // Redirect to home after login
     } catch (err: any) {
       setError(err.message);
@@ -31,12 +36,12 @@ export default function Login() {
             {error && <div className="alert alert-danger">{error}</div>}
             <form onSubmit={handleSubmit}>
               <div className="mb-3">
-                <label className="form-label">Username</label>
+                <label className="form-label">Email</label>
                 <input
                   type="text"
-                  name="username"
+                  name="email"
                   className="form-control"
-                  value={form.username}
+                  value={form.email}
                   onChange={handleChange}
                   required
                 />
