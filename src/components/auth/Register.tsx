@@ -135,7 +135,6 @@ export default function Register({ adminMode = false }: RegisterProps) {
                   ) : (
                     <>
                       <option value="USER">User</option>
-                      <option value="ADMIN">Admin</option>
                     </>
                   )}
                 </select>
