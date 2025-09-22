@@ -123,8 +123,8 @@ export default function Register() {
                   value={form.password}
                   onChange={handleChange}
                   required
-                  minLength={6}
-                  maxLength={32}
+                  minLength={8}
+                  maxLength={64}
                 />
               </div>
 

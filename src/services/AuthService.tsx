@@ -22,10 +22,8 @@ class AuthService {
   async login(data: LoginData) {
     try {
       const response = await axios.post(`${API_URL}/login`, data);
-      localStorage.setItem("token", response.data.IdToken);
-      const claims: any = jwtDecode(response.data.IdToken);
-      localStorage.setItem("username", claims.username!);
-      localStorage.setItem("userId", claims.sub!);
+      localStorage.setItem("accessToken", response.data.accessToken);
+      localStorage.setItem("refreshToken", response.data.refreshToken);
       return response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || "Login failed");
