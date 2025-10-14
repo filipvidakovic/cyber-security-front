@@ -52,7 +52,7 @@ const buildCn = (x500: X500Data) => {
         const id = await createRoot(cn, rootData.ttlDays); // pass string directly
         alert(`Root CA created with ID ${id}`);
     } catch (err: any) {
-        alert(err.response?.data || err.message || 'Unknown error occurred');
+        alert(err.response?.data.message || 'Unknown error occurred');
     }
     };
 
@@ -64,7 +64,7 @@ const buildCn = (x500: X500Data) => {
       const id = await createIntermediate(Number(intData.issuerId), cn, intData.ttlDays);
       alert(`Intermediate CA created with ID ${id}`);
     } catch (err: any) {
-      alert(err.response?.data || err.message || 'Unknown error occurred');
+      alert(err.response?.data.message || 'Unknown error occurred');
     }
   };
 
@@ -75,7 +75,7 @@ const buildCn = (x500: X500Data) => {
       const id = await issueEeAutogen(Number(eeAutoData.issuerId), cn, eeAutoData.ttlDays, eeAutoData.storePrivateKey);
       alert(`EE Certificate created with ID ${id}`);
     } catch (err: any) {
-      alert(err.response?.data || err.message || 'Unknown error occurred');
+      alert(err.response?.data.message || 'Unknown error occurred');
     }
   };
 
@@ -86,7 +86,7 @@ const buildCn = (x500: X500Data) => {
       const id = await issueEeFromCsr(Number(eeCsrData.issuerId), eeCsrData.ttlDays, eeCsrData.csr);
       alert(`EE Certificate created from CSR with ID ${id}`);
     } catch (err: any) {
-      alert(err.response?.data || err.message || 'Unknown error occurred');
+     alert(err.response?.data.message || 'Unknown error occurred');
     }
   };
 
