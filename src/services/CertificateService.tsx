@@ -111,3 +111,16 @@ export const getUserCertificates = async () => {
   });
   return res.data;
 };
+
+export const getIssuers = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/issuers`, {
+      headers: getAuthHeader(),
+    });
+    console.log(res.data);
+    return res.data;
+  } catch (err: any) {
+    console.error("Error fetching issuers:", err.response?.data || err.message);
+    throw err;
+  }
+};

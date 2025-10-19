@@ -15,7 +15,7 @@ export interface RegisterData {
   userRole: "ADMIN";
 }
 
-const API_URL = import.meta.env.VITE_API_URL + 'auth';
+const API_URL = import.meta.env.VITE_API_URL + "auth";
 
 class AuthService {
   async login(data: LoginData) {
@@ -34,6 +34,7 @@ class AuthService {
   async register(data: RegisterData) {
     try {
       const response = await axios.post(`${API_URL}/signup`, data);
+      console.log(`${API_URL}/signup`);
       return response.data;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || "Registration failed");
@@ -72,10 +73,12 @@ class AuthService {
           ...(token && { Authorization: `Bearer ${token}` }),
         },
       });
-      console.log(response.data)
+      console.log(response.data);
       return response.data;
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || "Failed to fetch user info");
+      throw new Error(
+        error.response?.data?.message || "Failed to fetch user info"
+      );
     }
   }
 }

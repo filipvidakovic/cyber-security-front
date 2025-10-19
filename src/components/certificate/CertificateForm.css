@@ -16,7 +16,7 @@
   border: 1px solid #ddd;
   border-radius: 10px;
   background-color: #f9f9f9;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .certificate-forms h2 {
@@ -61,4 +61,28 @@
 .certificate-forms p {
   text-align: center;
   color: #555;
+}
+.issuer-dropdown {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1rem;
+}
+
+.issuer-label {
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+}
+
+.issuer-select {
+  padding: 0.5rem 0.75rem;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease;
+}
+
+.issuer-select:hover,
+.issuer-select:focus {
+  border-color: #0056b3;
+  outline: none;
 }
