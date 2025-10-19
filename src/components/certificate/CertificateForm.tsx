@@ -8,6 +8,132 @@ import {
 } from "../../services/CertificateService";
 import "./CertificateForm.css";
 
+/** ----------------- ExtensionsPanel ----------------- */
+type Extensions = Record<string, string>;
+
+const kuFlags = [
+  "digitalSignature","nonRepudiation","keyEncipherment","dataEncipherment",
+  "keyAgreement","keyCertSign","cRLSign","encipherOnly","decipherOnly"
+] as const;
+
+const ekuOptions = [
+  "serverAuth","clientAuth","codeSigning","emailProtection","timeStamping","OCSPSigning"
+] as const;
+
+const LOCKED_CA = new Set(["keyCertSign","cRLSign"]);
+const FORBIDDEN_EE = new Set(["keyCertSign","cRLSign"]);
+
+const ExtensionsPanel: React.FC<{
+  value: Extensions;
+  onChange: (next: Extensions) => void;
+  isCa?: boolean;
+}> = ({ value, onChange, isCa }) => {
+  const kuSel = (value["2.5.29.15"] ?? "").split(",").filter(Boolean);
+  const ekuSel = (value["2.5.29.37"] ?? "").split(",").filter(Boolean);
+  const san = value["2.5.29.17"] ?? "";
+
+  // Enforce locks on mount/change of isCa
+  useEffect(() => {
+    const set = new Set(kuSel);
+    if (isCa) {
+      LOCKED_CA.forEach(f => set.add(f));       // CA: force ON
+    } else {
+      FORBIDDEN_EE.forEach(f => set.delete(f)); // EE: force OFF
+    }
+    const next = Array.from(set).join(",");
+    if (next !== (value["2.5.29.15"] ?? "")) {
+      onChange({ ...value, ...(next ? {["2.5.29.15"]: next} : {"2.5.29.15": ""}) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCa]);
+
+  const isKuDisabled = (f: typeof kuFlags[number]) =>
+    (isCa && LOCKED_CA.has(f)) || (!isCa && FORBIDDEN_EE.has(f));
+
+  const isKuChecked = (f: typeof kuFlags[number]) =>
+    (isCa && LOCKED_CA.has(f)) ? true
+    : (!isCa && FORBIDDEN_EE.has(f)) ? false
+    : kuSel.includes(f);
+
+  const toggleKu = (flag: typeof kuFlags[number]) => {
+    if (isKuDisabled(flag)) return; // respect disabled state
+    const set = new Set(kuSel);
+    set.has(flag) ? set.delete(flag) : set.add(flag);
+    // Re-assert policy after toggle
+    if (isCa) LOCKED_CA.forEach(f => set.add(f));
+    if (!isCa) FORBIDDEN_EE.forEach(f => set.delete(f));
+    const next = Array.from(set).join(",");
+    onChange({ ...value, ...(next ? {["2.5.29.15"]: next} : {"2.5.29.15": ""}) });
+  };
+
+  const toggleEku = (p: typeof ekuOptions[number]) => {
+    const set = new Set(ekuSel);
+    set.has(p) ? set.delete(p) : set.add(p);
+    const next = Array.from(set).join(",");
+    onChange({ ...value, ...(next ? {["2.5.29.37"]: next} : {"2.5.29.37": ""}) });
+  };
+
+  const updateSan = (s: string) => {
+    const val = s.trim();
+    onChange({ ...value, ...(val ? {["2.5.29.17"]: val} : {"2.5.29.17": ""}) });
+  };
+
+  return (
+    <fieldset className="ext-panel">
+      <legend>Extensions</legend>
+
+      <div className="ext-group">
+        <label className="ext-label">Key Usage (2.5.29.15)</label>
+        <div className="ext-grid">
+          {kuFlags.map(f => (
+            <label key={f} className={`ext-checkbox ${isKuDisabled(f) ? "ext-disabled":""}`}>
+              <input
+                type="checkbox"
+                checked={isKuChecked(f)}
+                onChange={() => toggleKu(f)}
+                disabled={isKuDisabled(f)}
+              />
+              {f}
+            </label>
+          ))}
+        </div>
+        {isCa && <small className="ext-help">For CA: keyCertSign &amp; cRLSign are required and locked.</small>}
+      </div>
+
+      <div className="ext-group">
+        <label className="ext-label">Extended Key Usage (2.5.29.37)</label>
+        <div className="ext-grid">
+          {ekuOptions.map(p => (
+            <label key={p} className="ext-checkbox">
+              <input
+                type="checkbox"
+                checked={ekuSel.includes(p)}
+                onChange={() => toggleEku(p)}
+              />
+              {p}
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="ext-group">
+        <label className="ext-label">Subject Alternative Name (2.5.29.17)</label>
+        <input
+          type="text"
+          className="ext-input"
+          placeholder="DNS:example.com, DNS:www.example.com, IP:10.0.0.5, EMAIL:ops@example.com"
+          value={san}
+          onChange={(e) => updateSan(e.target.value)}
+        />
+        <small className="ext-help">
+          Comma-separated. Supported: DNS, IP, EMAIL, URI.
+        </small>
+      </div>
+    </fieldset>
+  );
+};
+/** --------------- end ExtensionsPanel --------------- */
+
 interface CertificateFormsProps {
   role: "ADMIN" | "CA_USER" | "USER" | null;
 }
@@ -32,14 +158,12 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
     const loadIssuers = async () => {
       try {
         const data = await getIssuers();
-        console.log(data);
         setIssuers(data);
       } catch (err) {
         console.error(err);
         alert("Error loading issuers");
       }
     };
-
     loadIssuers();
   }, []);
 
@@ -81,9 +205,13 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
     csr: File | null;
   }>({ issuerId: "", ttlDays: 365, csr: null });
 
-  // Helperi
-  const escapeDnValue = (val: string) => val.replace(/[,+=<>;"\\]/g, "\\$&");
+  // Per-form extensions (sent to backend)
+  const [rootExt, setRootExt] = useState<Record<string, string>>({});
+  const [intExt, setIntExt] = useState<Record<string, string>>({});
+  const [eeAutoExt, setEeAutoExt] = useState<Record<string, string>>({});
 
+  // DN helpers
+  const escapeDnValue = (val: string) => val.replace(/[,+=<>;"\\]/g, "\\$&");
   const buildCn = (x500: X500Data) => {
     const parts = [
       x500.cn && `CN=${escapeDnValue(x500.cn)}`,
@@ -96,15 +224,37 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
     return parts.join(", ");
   };
 
-  // Submit handleri
+  // Cleanup: drop empty OIDs and (for EE) strip CA-only KU flags
+  const cleanupExtensions = (ext: Record<string,string>, isCa: boolean) => {
+    const out: Record<string,string> = {};
+    for (const [k,v] of Object.entries(ext)) {
+      const val = (v ?? "").trim();
+      if (!val) continue;
+      if (k === "2.5.29.15") {
+        const items = val.split(",").map(s=>s.trim()).filter(Boolean);
+        const filtered = isCa
+          ? Array.from(new Set([...items, "keyCertSign", "cRLSign"])) // ensure present
+          : items.filter(f => f !== "keyCertSign" && f !== "cRLSign"); // ensure absent
+        if (filtered.length) out[k] = filtered.join(",");
+      } else {
+        out[k] = val;
+      }
+    }
+    return out;
+  };
+
+  // ----------------- Submit handlers -----------------
   const handleRootSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const cn = buildCn(rootData);
-      const id = await createRoot(cn, rootData.ttlDays);
+      const extensions = cleanupExtensions(rootExt, true);
+      // TODO: ensure createRoot accepts (cn, ttlDays, extensions)
+      const id = await createRoot(cn, rootData.ttlDays, extensions as any);
       alert(`Root CA created with ID ${id}`);
+      setRootExt({});
     } catch (err: any) {
-      alert(err.response?.data.message || "Unknown error occurred");
+      alert(err.response?.data?.message || "Unknown error occurred");
     }
   };
 
@@ -112,16 +262,18 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
     e.preventDefault();
     try {
       const cn = buildCn(intData);
-      console.log("Selected issuerId:", intData.issuerId);
-
+      const extensions = cleanupExtensions(intExt, true);
+      // TODO: ensure createIntermediate accepts (issuerId, cn, ttlDays, extensions)
       const id = await createIntermediate(
         Number(intData.issuerId),
         cn,
-        intData.ttlDays
+        intData.ttlDays,
+        extensions as any
       );
       alert(`Intermediate CA created with ID ${id}`);
+      setIntExt({});
     } catch (err: any) {
-      alert(err.response?.data.message || "Unknown error occurred");
+      alert(err.response?.data?.message || "Unknown error occurred");
     }
   };
 
@@ -129,15 +281,19 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
     e.preventDefault();
     try {
       const cn = buildCn(eeAutoData);
+      const extensions = cleanupExtensions(eeAutoExt, false);
+      // TODO: ensure issueEeAutogen accepts (issuerId, cn, ttlDays, storePrivateKey, extensions)
       const id = await issueEeAutogen(
         Number(eeAutoData.issuerId),
         cn,
         eeAutoData.ttlDays,
-        eeAutoData.storePrivateKey
+        eeAutoData.storePrivateKey,
+        extensions as any
       );
       alert(`EE Certificate created with ID ${id}`);
+      setEeAutoExt({});
     } catch (err: any) {
-      alert(err.response?.data.message || "Unknown error occurred");
+      alert(err.response?.data?.message || "Unknown error occurred");
     }
   };
 
@@ -145,6 +301,7 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
     e.preventDefault();
     if (!eeCsrData.csr) return alert("Please upload a CSR file");
     try {
+      // CSR path: extensions come from CSR, so no panel used here
       const id = await issueEeFromCsr(
         Number(eeCsrData.issuerId),
         eeCsrData.ttlDays,
@@ -152,11 +309,11 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
       );
       alert(`EE Certificate created from CSR with ID ${id}`);
     } catch (err: any) {
-      alert(err.response?.data.message || "Unknown error occurred");
+      alert(err.response?.data?.message || "Unknown error occurred");
     }
   };
 
-  // Render X500 inputa
+  // --------------- Render X500 inputs ----------------
   const renderX500Inputs = (
     data: X500Data,
     setData: React.Dispatch<React.SetStateAction<any>>
@@ -217,6 +374,8 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
             }
             required
           />
+          {/* Root: CA mode */}
+          <ExtensionsPanel value={rootExt} onChange={setRootExt} isCa />
           <button type="submit">Create Root CA</button>
         </form>
       )}
@@ -227,7 +386,6 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
           {renderIssuerDropdown(intData.issuerId, (val) =>
             setIntData({ ...intData, issuerId: val })
           )}
-
           {renderX500Inputs(intData, setIntData)}
           <input
             type="number"
@@ -238,6 +396,8 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
             }
             required
           />
+          {/* Intermediate: CA mode */}
+          <ExtensionsPanel value={intExt} onChange={setIntExt} isCa />
           <button type="submit">Create Intermediate CA</button>
         </form>
       )}
@@ -247,7 +407,6 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
         {renderIssuerDropdown(eeAutoData.issuerId, (val) =>
           setEeAutoData({ ...eeAutoData, issuerId: val })
         )}
-
         {renderX500Inputs(eeAutoData, setEeAutoData)}
         <input
           type="number"
@@ -271,6 +430,8 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
             }
           />
         </label>
+        {/* EE: non-CA mode */}
+        <ExtensionsPanel value={eeAutoExt} onChange={setEeAutoExt} />
         <button type="submit">Generate EE Certificate</button>
       </form>
 
@@ -279,7 +440,6 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
         {renderIssuerDropdown(eeCsrData.issuerId, (val) =>
           setEeCsrData({ ...eeCsrData, issuerId: val })
         )}
-
         <input
           type="number"
           min="1"
@@ -297,6 +457,7 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
           }
           required
         />
+        {/* CSR path: extensions come from CSR */}
         <button type="submit">Generate EE from CSR</button>
       </form>
     </div>

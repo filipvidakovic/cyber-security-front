@@ -86,3 +86,12 @@
   border-color: #0056b3;
   outline: none;
 }
+.ext-panel { border: 1px dashed #bbb; padding: 1rem; border-radius: 8px; background: #fff; }
+.ext-panel legend { font-weight: 700; }
+.ext-group { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
+.ext-label { font-weight: 600; }
+.ext-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(180px,1fr)); gap: 0.35rem 0.75rem; }
+.ext-checkbox { display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem; }
+.ext-disabled { opacity: 0.55; }
+.ext-input { padding: 0.5rem; border-radius: 5px; border: 1px solid #ccc; font-size: 0.95rem; }
+.ext-help { color: #666; font-size: 0.85rem; }
