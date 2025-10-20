@@ -79,20 +79,27 @@ export async function issueEeFromCsr(
   return res.data;
 }
 
-export async function downloadP12(id: number, password: string) {
-  const res = await axios.get(`${API_URL}/${id}/download.p12`, {
+export const downloadCert = async (id: number, password?: string) => {
+  const res = await axios.get(`${API_URL}/${id}/download`, {
     responseType: "blob",
-    headers: { "X-P12-Password": password, ...getAuthHeader() },
+    headers: {
+      "X-P12-Password": password || "",
+      ...getAuthHeader(),
+    },
   });
+
+  const contentType = res.headers["content-type"];
+  const isPem = contentType?.includes("pem");
+  const extension = isPem ? "pem" : "p12";
+
   const url = window.URL.createObjectURL(new Blob([res.data]));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `cert-${id}.p12`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", `cert-${id}.${extension}`);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
 
 export async function getAllCertificates() {
   const res = await axios.get(`${API_URL}/admin`, { headers: getAuthHeader() });
@@ -104,7 +111,33 @@ export async function getUserCertificates() {
   return res.data;
 }
 
-export async function getIssuers() {
-  const res = await axios.get(`${API_URL}/issuers`, { headers: getAuthHeader() });
-  return res.data;
-}
+export const getIssuers = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/issuers`, {
+      headers: getAuthHeader(),
+    });
+    console.log(res.data);
+    return res.data;
+  } catch (err: any) {
+    console.error("Error fetching issuers:", err.response?.data || err.message);
+    throw err;
+  }
+};
+
+export const revokeCertificate = async (certId: number, reasonCode: number) => {
+  try {
+    const res = await axios.post(
+      `${API_URL}/revoke?certId=${certId}&reasonCode=${reasonCode}`,
+      {},
+      { headers: getAuthHeader() }
+    );
+    console.log(res.data);
+    return res.data;
+  } catch (err: any) {
+    console.error(
+      "Error revoking certificate:",
+      err.response?.data || err.message
+    );
+    throw err;
+  }
+};
