@@ -9,15 +9,19 @@ const getAuthHeader = () => {
 };
 
 export const createTemplate = async (template: CertificateTemplate) => {
-  const response = await api.post(BASE_URL, template, {
+  const response = await api.post(BASE_URL, template
+    , {
     headers: getAuthHeader(),
-  });
+  }
+);
   return response.data;
 };
 
 export const getTemplates = async (): Promise<CertificateTemplate[]> => {
-  const response = await api.get(BASE_URL, {
+  const response = await api.get(BASE_URL
+    , {
     headers: getAuthHeader(),
-  });
+  }
+);
   return response.data;
 };
