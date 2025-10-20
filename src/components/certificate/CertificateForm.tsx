@@ -425,6 +425,7 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
   }, [selectedTemplateId]);
 
   useEffect(() => {
+    if (role === "USER") return; // USERS don't need templates
     const loadTemplates = async () => {
       const data = await getTemplates();
       setTemplates(data);
