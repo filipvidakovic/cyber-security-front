@@ -7,6 +7,8 @@ import {
   issueEeFromCsr,
 } from "../../services/CertificateService";
 import "./CertificateForm.css";
+import { getTemplates } from "../../services/TemplateService";
+import type { CertificateTemplate } from "../../model/CertificateTemplate";
 
 /** ----------------- ExtensionsPanel ----------------- */
 type Extensions = Record<string, string>;
@@ -358,6 +360,35 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
       />
     </>
   );
+    const [templates, setTemplates] = useState<CertificateTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  useEffect(() => {
+  if (!selectedTemplateId) return;
+
+  const tmpl = templates.find(t => t.id === selectedTemplateId);
+  if (!tmpl) return;
+
+  // Example: fill intermediate CA fields
+  setIntData({
+    ...intData,
+    issuerId: tmpl.issuerId.toString(),
+    ttlDays: tmpl.ttlDays,
+  });
+
+  setIntExt({
+    "2.5.29.15": tmpl.keyUsage,
+    "2.5.29.37": tmpl.extendedKeyUsage,
+    "2.5.29.17": tmpl.sanRegex,
+  });
+}, [selectedTemplateId]);
+
+  useEffect(() => {
+    const loadTemplates = async () => {
+      const data = await getTemplates();
+      setTemplates(data);
+    };
+    loadTemplates();
+  }, []);
 
   return (
     <div className="certificate-forms">
@@ -383,6 +414,21 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
       {(role === "ADMIN" || role === "CA_USER") && (
         <form onSubmit={handleIntSubmit}>
           <h2>Intermediate CA</h2>
+
+            <div className="template-dropdown">
+            <label>Select Template:</label>
+            <select
+              value={selectedTemplateId ?? ""}
+              onChange={(e) => setSelectedTemplateId(Number(e.target.value))}
+            >
+              <option value="">— None —</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </div>
           {renderIssuerDropdown(intData.issuerId, (val) =>
             setIntData({ ...intData, issuerId: val })
           )}
