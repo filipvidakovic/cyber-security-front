@@ -12,6 +12,7 @@ import AuthService from "./services/AuthService";
 import Login from "./components/auth/Login";
 import Register from "./components/auth/Register";
 import HomePage from "./pages/HomePage";
+import { Navigate } from "react-router-dom";
 import CertificateForm from "./components/certificate/CertificateForm";
 import CertificateList from "./components/certificate/CertificateList";
 import TemplateForm from "./components/template/TemplateForm";
@@ -46,7 +47,6 @@ function AppContent() {
                   Home
                 </Link>
               </li>
-
               {(userRole === "ADMIN" ||
                 userRole === "CA_USER" ||
                 userRole === "USER") && (
@@ -72,7 +72,7 @@ function AppContent() {
                   </Link>
                 </li>
               )}
-              
+
               {(userRole === "ADMIN" || userRole === "CA_USER") && (
                 <li className="nav-item">
                   <Link className="nav-link" to="/create-template">
@@ -81,8 +81,6 @@ function AppContent() {
                 </li>
               )}
             </ul>
-
-
 
             <div className="d-flex">
               {!isLoggedIn ? (
@@ -107,31 +105,52 @@ function AppContent() {
       <div className="container">
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route
-            path="/login"
-            element={
-              <Login
-                onLogin={(role) => {
-                  setIsLoggedIn(true);
-                  setUserRole(role);
-                }}
+
+          {!isLoggedIn ? (
+            <>
+              <Route
+                path="/login"
+                element={
+                  <Login
+                    onLogin={(role) => {
+                      setIsLoggedIn(true);
+                      setUserRole(role);
+                    }}
+                  />
+                }
               />
-            }
-          />
-          <Route path="/register" element={<Register />} />
-          <Route
-            path="/create-certificates"
-            element={<CertificateForm role={userRole} />}
-          />
-          <Route
-            path="/register-ca-user"
-            element={<Register adminMode={true} />}
-          />
-          <Route
-            path="/certificates"
-            element={<CertificateList role={userRole} />}
-          />
-          <Route path="/create-template" element={<TemplateForm />} />
+              <Route path="/register" element={<Register />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </>
+          ) : (
+            <>
+              <Route
+                path="/login"
+                element={
+                  <Login
+                    onLogin={(role) => {
+                      setIsLoggedIn(true);
+                      setUserRole(role);
+                    }}
+                  />
+                }
+              />
+              <Route path="/register" element={<Register />} />
+              <Route
+                path="/create-certificates"
+                element={<CertificateForm role={userRole} />}
+              />
+              <Route
+                path="/register-ca-user"
+                element={<Register adminMode={true} />}
+              />
+              <Route
+                path="/certificates"
+                element={<CertificateList role={userRole} />}
+              />
+              <Route path="/create-template" element={<TemplateForm />} />
+            </>
+          )}
         </Routes>
       </div>
     </>
