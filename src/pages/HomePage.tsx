@@ -1,5 +1,5 @@
 function HomePage() {
-  return <></>;
+  return <>Check out our latest cybersecurity resources!</>;
 }
 
 export default HomePage;
