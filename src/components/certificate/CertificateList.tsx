@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
+import axios from "axios";
 import {
   downloadCert,
   revokeCertificate,
 } from "../../services/CertificateService";
-import api from "../../api/axiosInstance";
 
 interface CertificateDTO {
   id: number;
@@ -33,7 +33,7 @@ export default function CertificateList({ role }: CertificateListProps) {
       try {
         const token = localStorage.getItem("accessToken");
 
-        // Select endpoint based on user role
+        // ✅ Select endpoint based on user role
         let url = "";
         switch (role) {
           case "ADMIN":
@@ -48,7 +48,7 @@ export default function CertificateList({ role }: CertificateListProps) {
             break;
         }
 
-        const res = await api.get(url, {
+        const res = await axios.get(url, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
