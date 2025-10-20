@@ -1,77 +1,83 @@
-import axios from "axios";
+import axios, { AxiosError, type AxiosRequestConfig, type InternalAxiosRequestConfig } from "axios";
 import AuthService from "../services/AuthService";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
 });
 
-// Add the Authorization header to every request
-api.interceptors.request.use((config) => {
+// -------------------------
+// Attach access token
+// -------------------------
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = AuthService.getToken();
-  if (token) {
+  if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Handle 401 errors (token expired)
+// -------------------------
+// Token refresh queue
+// -------------------------
 let isRefreshing = false;
-let failedQueue: any[] = [];
+let failedQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: any) => void;
+}> = [];
 
 const processQueue = (error: any, token: string | null = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
+  failedQueue.forEach((p) => {
+    if (error) p.reject(error);
+    else if (token) p.resolve(token);
   });
   failedQueue = [];
 };
 
+// -------------------------
+// Response interceptor
+// -------------------------
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
+  async (error: AxiosError & { config: AxiosRequestConfig & { _retry?: boolean } }) => {
     const originalRequest = error.config;
 
-    // Skip retry for refresh endpoint
-    if (originalRequest.url.includes("/auth/refresh")) {
+    // If not a 401, reject immediately
+    if (error.response?.status !== 401) return Promise.reject(error);
+
+    // Skip refresh endpoint itself
+    if (originalRequest.url?.includes("/auth/refresh")) {
+      AuthService.logout();
       return Promise.reject(error);
     }
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        // Queue all failed requests until refresh completes
-        return new Promise(function (resolve, reject) {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return api(originalRequest);
-          })
-          .catch(Promise.reject);
-      }
+    // Retry only once
+    if (originalRequest._retry) return Promise.reject(error);
+    originalRequest._retry = true;
 
-      originalRequest._retry = true;
-      isRefreshing = true;
-
-      try {
-        const data = await AuthService.refreshToken();
-        processQueue(null, data.accessToken);
-        isRefreshing = false;
-
-        // Retry original request with new token
-        originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+    if (isRefreshing) {
+      // Queue all failed requests while refreshing
+      return new Promise<string>((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      }).then((token) => {
+        originalRequest.headers.Authorization = `Bearer ${token}`;
         return api(originalRequest);
-      } catch (refreshError) {
-        processQueue(refreshError, null);
-        isRefreshing = false;
-        AuthService.logout();
-        return Promise.reject(refreshError);
-      }
+      });
     }
 
-    return Promise.reject(error);
+    isRefreshing = true;
+
+    try {
+      const data = await AuthService.refreshToken();
+      processQueue(null, data.accessToken);
+      originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+      return api(originalRequest);
+    } catch (refreshError) {
+      processQueue(refreshError, null);
+      AuthService.logout();
+      return Promise.reject(refreshError);
+    } finally {
+      isRefreshing = false;
+    }
   }
 );
 

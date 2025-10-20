@@ -1,3 +1,4 @@
+// import axios from "axios";
 import api from "../api/axiosInstance";
 
 export interface LoginData {
@@ -87,7 +88,9 @@ class AuthService {
     if (!refreshToken) throw new Error("No refresh token found");
 
     try {
+      console.log(`${API_URL}/refresh`)
       const response = await api.post(`${API_URL}/refresh`, { refreshToken });
+      console.log("Token refreshed:", response.data);
       localStorage.setItem("accessToken", response.data.accessToken);
       localStorage.setItem("refreshToken", response.data.refreshToken);
       return response.data;
