@@ -4,6 +4,7 @@ import {
   revokeCertificate,
 } from "../../services/CertificateService";
 import api from "../../api/axiosInstance";
+import DownloadWithPassword from "./DownloadPasswordPopup";
 
 interface CertificateDTO {
   id: number;
@@ -159,12 +160,7 @@ export default function CertificateList({ role }: CertificateListProps) {
                 <td>{effectiveStatus}</td>
                 <td>{c.orgId}</td>
                 <td>
-                  <button
-                    className="btn btn-sm btn-primary me-2"
-                    onClick={() => handleDownload(c.id)}
-                  >
-                    Download
-                  </button>
+                  <DownloadWithPassword certId={c.id} />
 
                   {(role === "ADMIN" ||
                     role === "CA_USER" ||
