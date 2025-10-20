@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from "react";
 import { getIssuers } from "../../services/CertificateService";
 import {
@@ -10,8 +12,14 @@ import "./CertificateForm.css";
 import { getTemplates } from "../../services/TemplateService";
 import type { CertificateTemplate } from "../../model/CertificateTemplate";
 
-/** ----------------- ExtensionsPanel ----------------- */
+/** ----------------- Helpers ----------------- */
 type Extensions = Record<string, string>;
+
+type TemplateLocks = {
+  ku?: Set<string>;
+  eku?: Set<string>;
+  // SAN is never locked; only validated via regex if provided.
+};
 
 const kuFlags = [
   "digitalSignature",
@@ -37,22 +45,44 @@ const ekuOptions = [
 const LOCKED_CA = new Set(["keyCertSign", "cRLSign"]);
 const FORBIDDEN_EE = new Set(["keyCertSign", "cRLSign"]);
 
+// Parse template regex: supports "abc" or "/abc/i"
+const toRegExp = (raw?: string): RegExp | null => {
+  if (!raw || !raw.trim()) return null;
+  try {
+    const m = raw.match(/^\/(.+)\/([gimsuy]*)$/);
+    return m ? new RegExp(m[1], m[2]) : new RegExp(raw);
+  } catch {
+    return null;
+  }
+};
+
+/** ----------------- ExtensionsPanel ----------------- */
 const ExtensionsPanel: React.FC<{
   value: Extensions;
   onChange: (next: Extensions) => void;
   isCa?: boolean;
-}> = ({ value, onChange, isCa }) => {
-  const kuSel = (value["2.5.29.15"] ?? "").split(",").filter(Boolean);
-  const ekuSel = (value["2.5.29.37"] ?? "").split(",").filter(Boolean);
+  templateLocks?: TemplateLocks;
+  sanRegex?: string; // template-provided regex to validate SAN (optional)
+}> = ({ value, onChange, isCa, templateLocks, sanRegex }) => {
+  const kuSel = (value["2.5.29.15"] ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const ekuSel = (value["2.5.29.37"] ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   const san = value["2.5.29.17"] ?? "";
 
-  // Enforce locks on mount/change of isCa
+  const [sanError, setSanError] = useState<string>("");
+
+  // Enforce CA/EE policy when isCa changes
   useEffect(() => {
     const set = new Set(kuSel);
     if (isCa) {
-      LOCKED_CA.forEach((f) => set.add(f)); // CA: force ON
+      LOCKED_CA.forEach((f) => set.add(f)); // CA: must include keyCertSign/cRLSign
     } else {
-      FORBIDDEN_EE.forEach((f) => set.delete(f)); // EE: force OFF
+      FORBIDDEN_EE.forEach((f) => set.delete(f)); // EE: must exclude them
     }
     const next = Array.from(set).join(",");
     if (next !== (value["2.5.29.15"] ?? "")) {
@@ -64,8 +94,26 @@ const ExtensionsPanel: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCa]);
 
-  const isKuDisabled = (f: (typeof kuFlags)[number]) =>
-    (isCa && LOCKED_CA.has(f)) || (!isCa && FORBIDDEN_EE.has(f));
+  // SAN validation (live)
+  useEffect(() => {
+  const re = toRegExp(sanRegex);
+  if (!re) {
+    // If a non-empty regex string exists but can't compile, show it
+    setSanError(sanRegex && sanRegex.trim() ? `Invalid SAN regex in template: ${sanRegex}` : "");
+    return;
+  }
+  if (!san) {
+    setSanError(""); // empty SAN is OK
+    return;
+  }
+  setSanError(re.test(san) ? "" : `SAN does not match pattern: ${sanRegex}`);
+}, [san, sanRegex]);
+
+  const isKuDisabled = (f: (typeof kuFlags)[number]) => {
+    const lockedByRole = (isCa && LOCKED_CA.has(f)) || (!isCa && FORBIDDEN_EE.has(f));
+    const lockedByTemplate = templateLocks?.ku?.has(f) ?? false;
+    return lockedByRole || lockedByTemplate;
+  };
 
   const isKuChecked = (f: (typeof kuFlags)[number]) =>
     isCa && LOCKED_CA.has(f)
@@ -75,10 +123,9 @@ const ExtensionsPanel: React.FC<{
       : kuSel.includes(f);
 
   const toggleKu = (flag: (typeof kuFlags)[number]) => {
-    if (isKuDisabled(flag)) return; // respect disabled state
+    if (isKuDisabled(flag)) return;
     const set = new Set(kuSel);
     set.has(flag) ? set.delete(flag) : set.add(flag);
-    // Re-assert policy after toggle
     if (isCa) LOCKED_CA.forEach((f) => set.add(f));
     if (!isCa) FORBIDDEN_EE.forEach((f) => set.delete(f));
     const next = Array.from(set).join(",");
@@ -88,7 +135,11 @@ const ExtensionsPanel: React.FC<{
     });
   };
 
+  const isEkuDisabled = (p: (typeof ekuOptions)[number]) =>
+    templateLocks?.eku?.has(p) ?? false;
+
   const toggleEku = (p: (typeof ekuOptions)[number]) => {
+    if (isEkuDisabled(p)) return;
     const set = new Set(ekuSel);
     set.has(p) ? set.delete(p) : set.add(p);
     const next = Array.from(set).join(",");
@@ -99,7 +150,8 @@ const ExtensionsPanel: React.FC<{
   };
 
   const updateSan = (s: string) => {
-    const val = s.trim();
+    // Keep user’s typing intact; no trimming here
+    const val = s;
     onChange({
       ...value,
       ...(val ? { ["2.5.29.17"]: val } : { "2.5.29.17": "" }),
@@ -116,9 +168,8 @@ const ExtensionsPanel: React.FC<{
           {kuFlags.map((f) => (
             <label
               key={f}
-              className={`ext-checkbox ${
-                isKuDisabled(f) ? "ext-disabled" : ""
-              }`}
+              className={`ext-checkbox ${isKuDisabled(f) ? "ext-disabled" : ""}`}
+              title={isKuDisabled(f) ? "Locked by template/policy" : undefined}
             >
               <input
                 type="checkbox"
@@ -141,11 +192,16 @@ const ExtensionsPanel: React.FC<{
         <label className="ext-label">Extended Key Usage (2.5.29.37)</label>
         <div className="ext-grid">
           {ekuOptions.map((p) => (
-            <label key={p} className="ext-checkbox">
+            <label
+              key={p}
+              className={`ext-checkbox ${isEkuDisabled(p) ? "ext-disabled" : ""}`}
+              title={isEkuDisabled(p) ? "Locked by template" : undefined}
+            >
               <input
                 type="checkbox"
                 checked={ekuSel.includes(p)}
                 onChange={() => toggleEku(p)}
+                disabled={isEkuDisabled(p)}
               />
               {p}
             </label>
@@ -154,18 +210,23 @@ const ExtensionsPanel: React.FC<{
       </div>
 
       <div className="ext-group">
-        <label className="ext-label">
-          Subject Alternative Name (2.5.29.17)
-        </label>
+        <label className="ext-label">Subject Alternative Name (2.5.29.17)</label>
         <input
           type="text"
-          className="ext-input"
+          className={`ext-input ${sanError ? "ext-input-error" : ""}`}
           placeholder="DNS:example.com, DNS:www.example.com, IP:10.0.0.5, EMAIL:ops@example.com"
           value={san}
           onChange={(e) => updateSan(e.target.value)}
+          aria-invalid={!!sanError}
         />
+        {sanError && (
+          <div className="ext-error" role="alert">
+            {sanError}
+          </div>
+        )}
         <small className="ext-help">
           Comma-separated. Supported: DNS, IP, EMAIL, URI.
+          {sanRegex ? " (Template regex enforced.)" : ""}
         </small>
       </div>
     </fieldset>
@@ -249,6 +310,19 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
   const [intExt, setIntExt] = useState<Record<string, string>>({});
   const [eeAutoExt, setEeAutoExt] = useState<Record<string, string>>({});
 
+  // Template locks (Intermediate only): KU/EKU
+  const [intLocked, setIntLocked] = useState<{ ku: Set<string>; eku: Set<string> }>({
+    ku: new Set(),
+    eku: new Set(),
+  });
+
+  // Template regexes (Intermediate only)
+  const [intCnRegex, setIntCnRegex] = useState<string>("");
+  const [intSanRegex, setIntSanRegex] = useState<string>("");
+
+  // Inline CN error (Intermediate only)
+  const [intCnError, setIntCnError] = useState<string>("");
+
   // DN helpers
   const escapeDnValue = (val: string) => val.replace(/[,+=<>;"\\]/g, "\\$&");
   const buildCn = (x500: X500Data) => {
@@ -285,14 +359,73 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
     return out;
   };
 
+  const [templates, setTemplates] = useState<CertificateTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+
+  // When a template is selected, populate fields + set locks + set regexes
+  useEffect(() => {
+    if (!selectedTemplateId) {
+      // clear locks and regexes when no template selected
+      setIntLocked({ ku: new Set(), eku: new Set() });
+      setIntCnRegex("");
+      setIntSanRegex("");
+      setIntCnError("");
+      return;
+    }
+    const tmpl = templates.find((t) => t.id === selectedTemplateId);
+    if (!tmpl) return;
+
+    // Fill intermediate CA fields
+    setIntData((prev) => ({
+      ...prev,
+      issuerId: String(tmpl.issuerId ?? prev.issuerId),
+      ttlDays: tmpl.ttlDays ?? prev.ttlDays,
+    }));
+
+    // Set KU/EKU from template; keep SAN empty (regex validates only)
+    setIntExt({
+      "2.5.29.15": tmpl.keyUsage ?? "",
+      "2.5.29.37": tmpl.extendedKeyUsage ?? "",
+      "2.5.29.17": "",
+    });
+
+    // Locks for KU/EKU only
+    const kuSet = new Set(
+      (tmpl.keyUsage ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    );
+    const ekuSet = new Set(
+      (tmpl.extendedKeyUsage ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    );
+    setIntLocked({ ku: kuSet, eku: ekuSet });
+
+    // Store regexes separately for validation
+    setIntCnRegex((tmpl as any).cnRegex ?? "");   // optional in your model
+    setIntSanRegex(tmpl.sanRegex ?? "");
+    setIntCnError(""); // clear previous error
+  }, [selectedTemplateId, templates]);
+
+  useEffect(() => {
+    if (role === "USER") return; // USERS don't need templates
+    const loadTemplates = async () => {
+      const data = await getTemplates();
+      setTemplates(data);
+    };
+    loadTemplates();
+  }, [role]);
+
   // ----------------- Submit handlers -----------------
   const handleRootSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const cn = buildCn(rootData);
       const extensions = cleanupExtensions(rootExt, true);
-      // TODO: ensure createRoot accepts (cn, ttlDays, extensions)
-      const id = await createRoot(cn, rootData.ttlDays, extensions as any);
+      await createRoot(cn, rootData.ttlDays, extensions as any);
       alert(`Root CA created`);
       setRootExt({});
     } catch (err: any) {
@@ -302,11 +435,40 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
 
   const handleIntSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Validate CN against template regex (if provided); write inline error
+    const reCN = toRegExp(intCnRegex);
+    if (reCN) {
+    if (!intData.cn || !reCN.test(intData.cn)) {
+      setIntCnError(`CN does not match pattern: ${intCnRegex}`);
+      return;
+    }
+    setIntCnError("");
+  } else if (intCnRegex && intCnRegex.trim()) {
+    setIntCnError(`Invalid CN regex in template: ${intCnRegex}`);
+    return;
+  } else {
+    setIntCnError("");
+  }
+
+
+    // Validate SAN against template regex (if provided) — block submit if not matching
+    const reSAN = toRegExp(intSanRegex);
+    if (reSAN && (intExt["2.5.29.17"] ?? "").trim()) {
+      if (!reSAN.test(intExt["2.5.29.17"])) {
+        // ExtensionsPanel already shows inline error; also block submit here
+        alert(`SAN does not match pattern: ${intSanRegex}`);
+        return;
+      }
+    } else if (!reSAN && intSanRegex && intSanRegex.trim()) {
+      alert(`Invalid SAN regex in template: ${intSanRegex}`);
+      return;
+    }
+
     try {
       const cn = buildCn(intData);
       const extensions = cleanupExtensions(intExt, true);
-      // TODO: ensure createIntermediate accepts (issuerId, cn, ttlDays, extensions)
-      const id = await createIntermediate(
+      await createIntermediate(
         Number(intData.issuerId),
         cn,
         intData.ttlDays,
@@ -314,6 +476,11 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
       );
       alert(`Intermediate CA created`);
       setIntExt({});
+      setSelectedTemplateId(null);
+      setIntLocked({ ku: new Set(), eku: new Set() });
+      setIntCnRegex("");
+      setIntSanRegex("");
+      setIntCnError("");
     } catch (err: any) {
       alert(err.response?.data?.message || "Unknown error occurred");
     }
@@ -324,8 +491,7 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
     try {
       const cn = buildCn(eeAutoData);
       const extensions = cleanupExtensions(eeAutoExt, false);
-      // TODO: ensure issueEeAutogen accepts (issuerId, cn, ttlDays, storePrivateKey, extensions)
-      const id = await issueEeAutogen(
+      await issueEeAutogen(
         Number(eeAutoData.issuerId),
         cn,
         eeAutoData.ttlDays,
@@ -343,8 +509,7 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
     e.preventDefault();
     if (!eeCsrData.csr) return alert("Please upload a CSR file");
     try {
-      // CSR path: extensions come from CSR, so no panel used here
-      const id = await issueEeFromCsr(
+      await issueEeFromCsr(
         Number(eeCsrData.issuerId),
         eeCsrData.ttlDays,
         eeCsrData.csr
@@ -358,80 +523,75 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
   // --------------- Render X500 inputs ----------------
   const renderX500Inputs = (
     data: X500Data,
-    setData: React.Dispatch<React.SetStateAction<any>>
-  ) => (
-    <>
-      <input
-        type="text"
-        placeholder="Common Name (CN)"
-        value={data.cn}
-        onChange={(e) => setData({ ...data, cn: e.target.value })}
-        required
-      />
-      <input
-        type="text"
-        placeholder="Organizational Unit (OU)"
-        value={data.ou || ""}
-        onChange={(e) => setData({ ...data, ou: e.target.value })}
-      />
-      <input
-        type="text"
-        placeholder="Organization (O)"
-        value={data.o || ""}
-        onChange={(e) => setData({ ...data, o: e.target.value })}
-      />
-      <input
-        type="text"
-        placeholder="Locality (L)"
-        value={data.l || ""}
-        onChange={(e) => setData({ ...data, l: e.target.value })}
-      />
-      <input
-        type="text"
-        placeholder="State (ST)"
-        value={data.st || ""}
-        onChange={(e) => setData({ ...data, st: e.target.value })}
-      />
-      <input
-        type="text"
-        placeholder="Country (C)"
-        value={data.c || ""}
-        onChange={(e) => setData({ ...data, c: e.target.value })}
-      />
-    </>
-  );
-  const [templates, setTemplates] = useState<CertificateTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(
-    null
-  );
-  useEffect(() => {
-    if (!selectedTemplateId) return;
+    setData: React.Dispatch<React.SetStateAction<any>>,
+    opts?: { cnRegex?: string; cnError?: string } // optional CN regex + inline error
+  ) => {
+    return (
+      <>
+        <input
+          type="text"
+          placeholder="Common Name (CN)"
+          value={data.cn}
+          onChange={(e) => {
+            setData({ ...data, cn: e.target.value });
+            // live CN validation + inline error
+            const re = toRegExp(opts?.cnRegex);
+            if (opts?.cnRegex && opts.cnRegex.trim()) {
+              if (!re) {
+                setIntCnError(`Invalid CN regex in template: ${opts?.cnRegex}`);
+              } else if (e.target.value && !re.test(e.target.value)) {
+                setIntCnError(`CN does not match pattern: ${opts?.cnRegex}`);
+              } else {
+                setIntCnError("");
+              }
 
-    const tmpl = templates.find((t) => t.id === selectedTemplateId);
-    if (!tmpl) return;
+            } else {
+              setIntCnError("");
+            }
+          }}
+          required
+          className={`ext-input ${opts?.cnError ? "ext-input-error" : ""}`}
+          aria-invalid={!!opts?.cnError}
+        />
+        {opts?.cnError && (
+          <div className="ext-error" role="alert">
+            {opts.cnError}
+          </div>
+        )}
 
-    // Example: fill intermediate CA fields
-    setIntData({
-      ...intData,
-      issuerId: tmpl.issuerId.toString(),
-      ttlDays: tmpl.ttlDays,
-    });
-
-    setIntExt({
-      "2.5.29.15": tmpl.keyUsage,
-      "2.5.29.37": tmpl.extendedKeyUsage,
-      "2.5.29.17": tmpl.sanRegex,
-    });
-  }, [selectedTemplateId]);
-
-  useEffect(() => {
-    if (role === "USER") return; // USERS don't need templates
-    const loadTemplates = async () => {
-      const data = await getTemplates();
-      setTemplates(data);
-    };
-    loadTemplates();
-  }, []);
+        <input
+          type="text"
+          placeholder="Organizational Unit (OU)"
+          value={data.ou || ""}
+          onChange={(e) => setData({ ...data, ou: e.target.value })}
+        />
+        <input
+          type="text"
+          placeholder="Organization (O)"
+          value={data.o || ""}
+          onChange={(e) => setData({ ...data, o: e.target.value })}
+        />
+        <input
+          type="text"
+          placeholder="Locality (L)"
+          value={data.l || ""}
+          onChange={(e) => setData({ ...data, l: e.target.value })}
+        />
+        <input
+          type="text"
+          placeholder="State (ST)"
+          value={data.st || ""}
+          onChange={(e) => setData({ ...data, st: e.target.value })}
+        />
+        <input
+          type="text"
+          placeholder="Country (C)"
+          value={data.c || ""}
+          onChange={(e) => setData({ ...data, c: e.target.value })}
+        />
+      </>
+    );
+  };
 
   return (
     <div className="certificate-forms">
@@ -462,7 +622,9 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
             <label>Select Template:</label>
             <select
               value={selectedTemplateId ?? ""}
-              onChange={(e) => setSelectedTemplateId(Number(e.target.value))}
+              onChange={(e) =>
+                setSelectedTemplateId(e.target.value ? Number(e.target.value) : null)
+              }
             >
               <option value="">— None —</option>
               {templates.map((t) => (
@@ -472,10 +634,14 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
               ))}
             </select>
           </div>
+
           {renderIssuerDropdown(intData.issuerId, (val) =>
             setIntData({ ...intData, issuerId: val })
           )}
-          {renderX500Inputs(intData, setIntData)}
+
+          {/* CN respects template CN regex (if any) and shows inline error */}
+          {renderX500Inputs(intData, setIntData, { cnRegex: intCnRegex, cnError: intCnError })}
+
           <input
             type="number"
             min="1"
@@ -485,9 +651,19 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
             }
             required
           />
-          {/* Intermediate: CA mode */}
-          <ExtensionsPanel value={intExt} onChange={setIntExt} isCa />
-          <button type="submit">Create Intermediate CA</button>
+
+          {/* Intermediate: CA mode with KU/EKU locks; SAN validated by regex (not locked) */}
+          <ExtensionsPanel
+            value={intExt}
+            onChange={setIntExt}
+            isCa
+            templateLocks={intLocked}
+            sanRegex={intSanRegex}
+          />
+
+          <button type="submit" disabled={!!intCnError}>
+            Create Intermediate CA
+          </button>
         </form>
       )}
 
@@ -554,3 +730,5 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
 };
 
 export default CertificateForm;
+
+
