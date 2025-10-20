@@ -14,16 +14,28 @@ import type { CertificateTemplate } from "../../model/CertificateTemplate";
 type Extensions = Record<string, string>;
 
 const kuFlags = [
-  "digitalSignature","nonRepudiation","keyEncipherment","dataEncipherment",
-  "keyAgreement","keyCertSign","cRLSign","encipherOnly","decipherOnly"
+  "digitalSignature",
+  "nonRepudiation",
+  "keyEncipherment",
+  "dataEncipherment",
+  "keyAgreement",
+  "keyCertSign",
+  "cRLSign",
+  "encipherOnly",
+  "decipherOnly",
 ] as const;
 
 const ekuOptions = [
-  "serverAuth","clientAuth","codeSigning","emailProtection","timeStamping","OCSPSigning"
+  "serverAuth",
+  "clientAuth",
+  "codeSigning",
+  "emailProtection",
+  "timeStamping",
+  "OCSPSigning",
 ] as const;
 
-const LOCKED_CA = new Set(["keyCertSign","cRLSign"]);
-const FORBIDDEN_EE = new Set(["keyCertSign","cRLSign"]);
+const LOCKED_CA = new Set(["keyCertSign", "cRLSign"]);
+const FORBIDDEN_EE = new Set(["keyCertSign", "cRLSign"]);
 
 const ExtensionsPanel: React.FC<{
   value: Extensions;
@@ -38,46 +50,60 @@ const ExtensionsPanel: React.FC<{
   useEffect(() => {
     const set = new Set(kuSel);
     if (isCa) {
-      LOCKED_CA.forEach(f => set.add(f));       // CA: force ON
+      LOCKED_CA.forEach((f) => set.add(f)); // CA: force ON
     } else {
-      FORBIDDEN_EE.forEach(f => set.delete(f)); // EE: force OFF
+      FORBIDDEN_EE.forEach((f) => set.delete(f)); // EE: force OFF
     }
     const next = Array.from(set).join(",");
     if (next !== (value["2.5.29.15"] ?? "")) {
-      onChange({ ...value, ...(next ? {["2.5.29.15"]: next} : {"2.5.29.15": ""}) });
+      onChange({
+        ...value,
+        ...(next ? { ["2.5.29.15"]: next } : { "2.5.29.15": "" }),
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCa]);
 
-  const isKuDisabled = (f: typeof kuFlags[number]) =>
+  const isKuDisabled = (f: (typeof kuFlags)[number]) =>
     (isCa && LOCKED_CA.has(f)) || (!isCa && FORBIDDEN_EE.has(f));
 
-  const isKuChecked = (f: typeof kuFlags[number]) =>
-    (isCa && LOCKED_CA.has(f)) ? true
-    : (!isCa && FORBIDDEN_EE.has(f)) ? false
-    : kuSel.includes(f);
+  const isKuChecked = (f: (typeof kuFlags)[number]) =>
+    isCa && LOCKED_CA.has(f)
+      ? true
+      : !isCa && FORBIDDEN_EE.has(f)
+      ? false
+      : kuSel.includes(f);
 
-  const toggleKu = (flag: typeof kuFlags[number]) => {
+  const toggleKu = (flag: (typeof kuFlags)[number]) => {
     if (isKuDisabled(flag)) return; // respect disabled state
     const set = new Set(kuSel);
     set.has(flag) ? set.delete(flag) : set.add(flag);
     // Re-assert policy after toggle
-    if (isCa) LOCKED_CA.forEach(f => set.add(f));
-    if (!isCa) FORBIDDEN_EE.forEach(f => set.delete(f));
+    if (isCa) LOCKED_CA.forEach((f) => set.add(f));
+    if (!isCa) FORBIDDEN_EE.forEach((f) => set.delete(f));
     const next = Array.from(set).join(",");
-    onChange({ ...value, ...(next ? {["2.5.29.15"]: next} : {"2.5.29.15": ""}) });
+    onChange({
+      ...value,
+      ...(next ? { ["2.5.29.15"]: next } : { "2.5.29.15": "" }),
+    });
   };
 
-  const toggleEku = (p: typeof ekuOptions[number]) => {
+  const toggleEku = (p: (typeof ekuOptions)[number]) => {
     const set = new Set(ekuSel);
     set.has(p) ? set.delete(p) : set.add(p);
     const next = Array.from(set).join(",");
-    onChange({ ...value, ...(next ? {["2.5.29.37"]: next} : {"2.5.29.37": ""}) });
+    onChange({
+      ...value,
+      ...(next ? { ["2.5.29.37"]: next } : { "2.5.29.37": "" }),
+    });
   };
 
   const updateSan = (s: string) => {
     const val = s.trim();
-    onChange({ ...value, ...(val ? {["2.5.29.17"]: val} : {"2.5.29.17": ""}) });
+    onChange({
+      ...value,
+      ...(val ? { ["2.5.29.17"]: val } : { "2.5.29.17": "" }),
+    });
   };
 
   return (
@@ -87,8 +113,13 @@ const ExtensionsPanel: React.FC<{
       <div className="ext-group">
         <label className="ext-label">Key Usage (2.5.29.15)</label>
         <div className="ext-grid">
-          {kuFlags.map(f => (
-            <label key={f} className={`ext-checkbox ${isKuDisabled(f) ? "ext-disabled":""}`}>
+          {kuFlags.map((f) => (
+            <label
+              key={f}
+              className={`ext-checkbox ${
+                isKuDisabled(f) ? "ext-disabled" : ""
+              }`}
+            >
               <input
                 type="checkbox"
                 checked={isKuChecked(f)}
@@ -99,13 +130,17 @@ const ExtensionsPanel: React.FC<{
             </label>
           ))}
         </div>
-        {isCa && <small className="ext-help">For CA: keyCertSign &amp; cRLSign are required and locked.</small>}
+        {isCa && (
+          <small className="ext-help">
+            For CA: keyCertSign &amp; cRLSign are required and locked.
+          </small>
+        )}
       </div>
 
       <div className="ext-group">
         <label className="ext-label">Extended Key Usage (2.5.29.37)</label>
         <div className="ext-grid">
-          {ekuOptions.map(p => (
+          {ekuOptions.map((p) => (
             <label key={p} className="ext-checkbox">
               <input
                 type="checkbox"
@@ -119,7 +154,9 @@ const ExtensionsPanel: React.FC<{
       </div>
 
       <div className="ext-group">
-        <label className="ext-label">Subject Alternative Name (2.5.29.17)</label>
+        <label className="ext-label">
+          Subject Alternative Name (2.5.29.17)
+        </label>
         <input
           type="text"
           className="ext-input"
@@ -227,16 +264,19 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
   };
 
   // Cleanup: drop empty OIDs and (for EE) strip CA-only KU flags
-  const cleanupExtensions = (ext: Record<string,string>, isCa: boolean) => {
-    const out: Record<string,string> = {};
-    for (const [k,v] of Object.entries(ext)) {
+  const cleanupExtensions = (ext: Record<string, string>, isCa: boolean) => {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(ext)) {
       const val = (v ?? "").trim();
       if (!val) continue;
       if (k === "2.5.29.15") {
-        const items = val.split(",").map(s=>s.trim()).filter(Boolean);
+        const items = val
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
         const filtered = isCa
           ? Array.from(new Set([...items, "keyCertSign", "cRLSign"])) // ensure present
-          : items.filter(f => f !== "keyCertSign" && f !== "cRLSign"); // ensure absent
+          : items.filter((f) => f !== "keyCertSign" && f !== "cRLSign"); // ensure absent
         if (filtered.length) out[k] = filtered.join(",");
       } else {
         out[k] = val;
@@ -253,7 +293,7 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
       const extensions = cleanupExtensions(rootExt, true);
       // TODO: ensure createRoot accepts (cn, ttlDays, extensions)
       const id = await createRoot(cn, rootData.ttlDays, extensions as any);
-      alert(`Root CA created with ID ${id}`);
+      alert(`Root CA created`);
       setRootExt({});
     } catch (err: any) {
       alert(err.response?.data?.message || "Unknown error occurred");
@@ -272,7 +312,7 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
         intData.ttlDays,
         extensions as any
       );
-      alert(`Intermediate CA created with ID ${id}`);
+      alert(`Intermediate CA created`);
       setIntExt({});
     } catch (err: any) {
       alert(err.response?.data?.message || "Unknown error occurred");
@@ -292,7 +332,7 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
         eeAutoData.storePrivateKey,
         extensions as any
       );
-      alert(`EE Certificate created with ID ${id}`);
+      alert(`EE Certificate created`);
       setEeAutoExt({});
     } catch (err: any) {
       alert(err.response?.data?.message || "Unknown error occurred");
@@ -309,7 +349,7 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
         eeCsrData.ttlDays,
         eeCsrData.csr
       );
-      alert(`EE Certificate created from CSR with ID ${id}`);
+      alert(`EE Certificate created from CSR`);
     } catch (err: any) {
       alert(err.response?.data?.message || "Unknown error occurred");
     }
@@ -360,27 +400,29 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
       />
     </>
   );
-    const [templates, setTemplates] = useState<CertificateTemplate[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [templates, setTemplates] = useState<CertificateTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(
+    null
+  );
   useEffect(() => {
-  if (!selectedTemplateId) return;
+    if (!selectedTemplateId) return;
 
-  const tmpl = templates.find(t => t.id === selectedTemplateId);
-  if (!tmpl) return;
+    const tmpl = templates.find((t) => t.id === selectedTemplateId);
+    if (!tmpl) return;
 
-  // Example: fill intermediate CA fields
-  setIntData({
-    ...intData,
-    issuerId: tmpl.issuerId.toString(),
-    ttlDays: tmpl.ttlDays,
-  });
+    // Example: fill intermediate CA fields
+    setIntData({
+      ...intData,
+      issuerId: tmpl.issuerId.toString(),
+      ttlDays: tmpl.ttlDays,
+    });
 
-  setIntExt({
-    "2.5.29.15": tmpl.keyUsage,
-    "2.5.29.37": tmpl.extendedKeyUsage,
-    "2.5.29.17": tmpl.sanRegex,
-  });
-}, [selectedTemplateId]);
+    setIntExt({
+      "2.5.29.15": tmpl.keyUsage,
+      "2.5.29.37": tmpl.extendedKeyUsage,
+      "2.5.29.17": tmpl.sanRegex,
+    });
+  }, [selectedTemplateId]);
 
   useEffect(() => {
     if (role === "USER") return; // USERS don't need templates
@@ -416,7 +458,7 @@ const CertificateForm: React.FC<CertificateFormsProps> = ({ role }) => {
         <form onSubmit={handleIntSubmit}>
           <h2>Intermediate CA</h2>
 
-            <div className="template-dropdown">
+          <div className="template-dropdown">
             <label>Select Template:</label>
             <select
               value={selectedTemplateId ?? ""}
