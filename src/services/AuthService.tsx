@@ -1,4 +1,4 @@
-import api from "../api/axiosInstance";
+import axios from "axios";
 
 export interface LoginData {
   email: string;
@@ -20,7 +20,7 @@ const API_URL = import.meta.env.VITE_API_URL + "auth";
 class AuthService {
   async login(data: LoginData) {
     try {
-      const response = await api.post(`${API_URL}/login`, data);
+      const response = await axios.post(`${API_URL}/login`, data);
       localStorage.setItem("email", response.data.email);
       localStorage.setItem("accessToken", response.data.accessToken);
       localStorage.setItem("refreshToken", response.data.refreshToken);
@@ -33,7 +33,7 @@ class AuthService {
 
   async register(data: RegisterData) {
     try {
-      const response = await api.post(`${API_URL}/signup`, data);
+      const response = await axios.post(`${API_URL}/signup`, data);
       console.log(`${API_URL}/signup`);
       return response.data;
     } catch (error: any) {
@@ -67,7 +67,7 @@ class AuthService {
     const token = localStorage.getItem("accessToken");
 
     try {
-      const response = await api.get(`${API_URL}/users/${email}`, {
+      const response = await axios.get(`${API_URL}/users/${email}`, {
         headers: {
           "Content-Type": "application/json",
           ...(token && { Authorization: `Bearer ${token}` }),
@@ -81,22 +81,6 @@ class AuthService {
       );
     }
   }
-
-  async refreshToken() {
-    const refreshToken = localStorage.getItem("refreshToken");
-    if (!refreshToken) throw new Error("No refresh token found");
-
-    try {
-      const response = await api.post(`${API_URL}/refresh`, { refreshToken });
-      localStorage.setItem("accessToken", response.data.accessToken);
-      localStorage.setItem("refreshToken", response.data.refreshToken);
-      return response.data;
-    } catch (error: any) {
-      this.logout();
-      throw new Error(error.response?.data?.message || "Failed to refresh token");
-    }
-  }
-
 }
 
 export default new AuthService();
