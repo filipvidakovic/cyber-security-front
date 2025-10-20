@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import { downloadP12 } from "../../services/CertificateService";
+import {
+  downloadCert,
+  revokeCertificate,
+} from "../../services/CertificateService";
 
 interface CertificateDTO {
   id: number;
@@ -67,17 +70,46 @@ export default function CertificateList({ role }: CertificateListProps) {
     if (!password) return alert("Download cancelled — password is required.");
 
     try {
-      await downloadP12(id, password);
+      await downloadCert(id, password);
     } catch (err) {
       alert("Failed to download certificate.");
     }
   };
 
-  const handleRevoke = (id: number) => {
+  const handleRevoke = async (id: number) => {
     if (!window.confirm("Are you sure you want to revoke this certificate?"))
       return;
-    console.log("Revoke certificate:", id);
-    // TODO: integrate with revoke API
+
+    const reasonText =
+      "Select revocation reason (enter number):\n\n" +
+      "1 - Key Compromise\n" +
+      "3 - Affiliation Changed\n" +
+      "4 - Superseded\n" +
+      "5 - Cessation of Operation\n" +
+      "9 - Privilege Withdrawn";
+
+    const reasonInput = prompt(reasonText);
+    if (reasonInput === null) return;
+
+    const reasonCode = parseInt(reasonInput);
+    const validReasons = [1, 3, 4, 5, 9];
+
+    if (!validReasons.includes(reasonCode)) {
+      alert("Invalid reason code. Allowed values are 1, 3, 4, 5, or 9.");
+      return;
+    }
+
+    try {
+      const msg = await revokeCertificate(id, reasonCode);
+      alert(msg || "Certificate revoked successfully!");
+
+      setCertificates((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, status: "REVOKED" } : c))
+      );
+    } catch (err) {
+      console.error("Failed to revoke certificate:", err);
+      alert("Failed to revoke certificate. Please try again.");
+    }
   };
 
   // ✅ Loading & Error states
