@@ -1,9 +1,10 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import AuthService, { type RegisterData } from "../../services/AuthService";
+import zxcvbn from "zxcvbn";
 
 interface RegisterProps {
-  adminMode?: boolean; // if true, admin registering CA user
+  adminMode?: boolean;
 }
 
 export default function Register({ adminMode = false }: RegisterProps) {
@@ -14,15 +15,25 @@ export default function Register({ adminMode = false }: RegisterProps) {
     firstName: "",
     lastName: "",
     organization: "",
-    userRole: adminMode ? "CA_USER" : "USER", // default based on mode
+    userRole: adminMode ? "CA_USER" : "USER",
   });
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [passwordScore, setPasswordScore] = useState<number>(0);
+  const [passwordFeedback, setPasswordFeedback] = useState<string>("");
+
   const navigate = useNavigate();
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+
+    if (name === "password") {
+      const strength = zxcvbn(value);
+      setPasswordScore(strength.score);
+      setPasswordFeedback(strength.feedback.suggestions.join(" "));
+    }
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -38,8 +49,7 @@ export default function Register({ adminMode = false }: RegisterProps) {
     try {
       await AuthService.register(form);
       setSuccess(`User ${form.email} registered successfully.`);
-      console.log("AD")
-      console.log(adminMode)
+
       setForm({
         email: "",
         password: "",
@@ -50,13 +60,28 @@ export default function Register({ adminMode = false }: RegisterProps) {
         userRole: adminMode ? "CA_USER" : "USER",
       });
 
-      if (!adminMode) {
-        navigate("/login"); // for public registration, go to login
-      }
+      setPasswordScore(0);
+      setPasswordFeedback("");
+
+      if (!adminMode) navigate("/login");
     } catch (err: any) {
       setError(err.message || "Registration failed.");
     }
   };
+
+  // Password strength color bar
+  const getStrengthColor = (score: number) => {
+    switch (score) {
+      case 0: return "bg-danger";
+      case 1: return "bg-warning";
+      case 2: return "bg-info";
+      case 3: return "bg-primary";
+      case 4: return "bg-success";
+      default: return "bg-secondary";
+    }
+  };
+
+  const strengthLabels = ["Very Weak", "Weak", "Fair", "Good", "Strong"];
 
   return (
     <div className="container mt-5">
@@ -71,6 +96,7 @@ export default function Register({ adminMode = false }: RegisterProps) {
             {success && <div className="alert alert-success">{success}</div>}
 
             <form onSubmit={handleSubmit}>
+              {/* Email */}
               <div className="mb-3">
                 <label className="form-label">Email</label>
                 <input
@@ -83,6 +109,7 @@ export default function Register({ adminMode = false }: RegisterProps) {
                 />
               </div>
 
+              {/* First/Last name */}
               <div className="row">
                 <div className="col-md-6 mb-3">
                   <label className="form-label">First Name</label>
@@ -108,6 +135,7 @@ export default function Register({ adminMode = false }: RegisterProps) {
                 </div>
               </div>
 
+              {/* Organization */}
               <div className="mb-3">
                 <label className="form-label">Organization</label>
                 <input
@@ -120,6 +148,7 @@ export default function Register({ adminMode = false }: RegisterProps) {
                 />
               </div>
 
+              {/* Role */}
               <div className="mb-3">
                 <label className="form-label">Role</label>
                 <select
@@ -128,18 +157,17 @@ export default function Register({ adminMode = false }: RegisterProps) {
                   value={form.userRole}
                   onChange={handleChange}
                   required
-                  disabled={adminMode} // disable if admin creating CA user
+                  disabled={adminMode}
                 >
                   {adminMode ? (
                     <option value="CA_USER">CA User</option>
                   ) : (
-                    <>
-                      <option value="USER">User</option>
-                    </>
+                    <option value="USER">User</option>
                   )}
                 </select>
               </div>
 
+              {/* Password */}
               <div className="mb-3">
                 <label className="form-label">Password</label>
                 <input
@@ -152,8 +180,23 @@ export default function Register({ adminMode = false }: RegisterProps) {
                   minLength={8}
                   maxLength={64}
                 />
+                {form.password && (
+                  <>
+                    <div className="progress mt-2" style={{ height: "6px" }}>
+                      <div
+                        className={`progress-bar ${getStrengthColor(passwordScore)}`}
+                        style={{ width: `${(passwordScore + 1) * 20}%` }}
+                      ></div>
+                    </div>
+                    <small className="text-muted">
+                      Strength: {strengthLabels[passwordScore]}{" "}
+                      {passwordFeedback && `– ${passwordFeedback}`}
+                    </small>
+                  </>
+                )}
               </div>
 
+              {/* Confirm Password */}
               <div className="mb-3">
                 <label className="form-label">Confirm Password</label>
                 <input
