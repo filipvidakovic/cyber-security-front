@@ -13,7 +13,7 @@ export interface RegisterData {
   firstName: string;
   lastName: string;
   organization: string;
-  userRole: "ADMIN";
+  userRole: "ADMIN" | "CA_USER" | "USER";
 }
 
 const API_URL = import.meta.env.VITE_API_URL + "auth";
