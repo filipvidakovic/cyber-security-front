@@ -14,6 +14,7 @@ import Register from "./components/auth/Register";
 import HomePage from "./pages/HomePage";
 import CertificateForm from "./components/certificate/CertificateForm";
 import CertificateList from "./components/certificate/CertificateList";
+import TemplateForm from "./components/template/TemplateForm";
 
 function AppContent() {
   const navigate = useNavigate();
@@ -71,7 +72,17 @@ function AppContent() {
                   </Link>
                 </li>
               )}
+              
+              {(userRole === "ADMIN" || userRole === "CA_USER") && (
+                <li className="nav-item">
+                  <Link className="nav-link" to="/create-template">
+                    Create Template
+                  </Link>
+                </li>
+              )}
             </ul>
+
+
 
             <div className="d-flex">
               {!isLoggedIn ? (
@@ -120,6 +131,7 @@ function AppContent() {
             path="/certificates"
             element={<CertificateList role={userRole} />}
           />
+          <Route path="/create-template" element={<TemplateForm />} />
         </Routes>
       </div>
     </>
