@@ -1,4 +1,4 @@
-import axios from "axios";
+import api from "../api/axiosInstance";
 
 const API_URL = import.meta.env.VITE_API_URL + "cert";
 
@@ -23,7 +23,7 @@ export async function createRoot(
   extensions?: Record<string, string>
 ): Promise<number> {
   const reqBody = { cn, ttlDays, extensions: pruneExtensions(extensions) };
-  const res = await axios.post(`${API_URL}/root`, reqBody, {
+  const res = await api.post(`${API_URL}/root`, reqBody, {
     headers: getAuthHeader(),
   });
   return res.data as number;
@@ -35,7 +35,7 @@ export async function createIntermediate(
   ttlDays: number,
   extensions?: Record<string, string>
 ) {
-  const res = await axios.post(
+  const res = await api.post(
     `${API_URL}/intermediate`,
     { issuerId, cn, ttlDays, extensions: pruneExtensions(extensions) },
     { headers: getAuthHeader() }
@@ -50,7 +50,7 @@ export async function issueEeAutogen(
   storePrivateKey: boolean,
   extensions?: Record<string, string>
 ) {
-  const res = await axios.post(
+  const res = await api.post(
     `${API_URL}/ee/autogen`,
     {
       issuerId,
@@ -73,14 +73,14 @@ export async function issueEeFromCsr(
   formData.append("csr", csrFile);
   formData.append("issuerId", String(issuerId));
   formData.append("ttlDays", String(ttlDays));
-  const res = await axios.post(`${API_URL}/ee/from-csr`, formData, {
+  const res = await api.post(`${API_URL}/ee/from-csr`, formData, {
     headers: { "Content-Type": "multipart/form-data", ...getAuthHeader() },
   });
   return res.data;
 }
 
 export const downloadCert = async (id: number, password?: string) => {
-  const res = await axios.get(`${API_URL}/${id}/download`, {
+  const res = await api.get(`${API_URL}/${id}/download`, {
     responseType: "blob",
     headers: {
       "X-P12-Password": password || "",
@@ -102,18 +102,18 @@ export const downloadCert = async (id: number, password?: string) => {
 };
 
 export async function getAllCertificates() {
-  const res = await axios.get(`${API_URL}/admin`, { headers: getAuthHeader() });
+  const res = await api.get(`${API_URL}/admin`, { headers: getAuthHeader() });
   return res.data;
 }
 
 export async function getUserCertificates() {
-  const res = await axios.get(`${API_URL}/user`, { headers: getAuthHeader() });
+  const res = await api.get(`${API_URL}/user`, { headers: getAuthHeader() });
   return res.data;
 }
 
 export const getIssuers = async () => {
   try {
-    const res = await axios.get(`${API_URL}/issuers`, {
+    const res = await api.get(`${API_URL}/issuers`, {
       headers: getAuthHeader(),
     });
     console.log(res.data);
@@ -126,7 +126,7 @@ export const getIssuers = async () => {
 
 export const revokeCertificate = async (certId: number, reasonCode: number) => {
   try {
-    const res = await axios.post(
+    const res = await api.post(
       `${API_URL}/revoke?certId=${certId}&reasonCode=${reasonCode}`,
       {},
       { headers: getAuthHeader() }
